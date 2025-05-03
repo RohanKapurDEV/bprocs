@@ -2,17 +2,31 @@ import pandas as pd
 from common.trade import Trade
 from common.binance_client import BinanceClient
 from common.csv_writer import write_trades_to_csv
+from rich.progress import Progress
+from rich import print
+from datetime import datetime
 
 
 async def run_fetch_trades(symbol: str, days: int, output: str, start_now: bool):
     print(f"Fetching trades for {symbol} for the last {days} days...")
 
     client = BinanceClient(symbol)
-    data = await client.fetch_agg_trades(days_back=days, start_now=start_now)
+    data = []
+
+    with Progress() as progress:
+        task = progress.add_task(
+            "[cyan]Fetching...", total=None
+        )  # Indeterminate progress
+        async for batch in client.fetch_agg_trades(days_back=days, start_now=start_now):
+            data.extend(batch)
+            latest_ts = datetime.utcfromtimestamp(batch[-1]["T"] / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            progress.update(task, description=f"Latest trade: {latest_ts}")
+
     trades = [Trade(item.get("p"), item.get("q"), item.get("T")) for item in data]
     write_trades_to_csv(trades, output)
-
-    print(f"Wrote {len(trades)} trades to {output}")
+    print(f"\nWrote {len(trades)} trades to {output}")
 
 
 async def run_generate_timebars(
