@@ -13,7 +13,12 @@ def main():
     fetch_parser.add_argument("days", nargs="?", type=int, default=2)
     fetch_parser.add_argument("output", nargs="?", default="trades.csv")
 
-    # Subparser for turning a trade csv file into time-discretized OHLCV data
+    # Subparser for turning a trades csv file into time-discretized OHLCV data
+    ohlcv_parser = subparsers.add_parser("convert-to-ohlcv")
+    ohlcv_parser.add_argument("input_file", nargs="?", default="trades.csv")
+    ohlcv_parser.add_argument("output_file", nargs="?", default="ohlcv.csv")
+
+    # Subparser for turning a trades csv file into dollar-discretized OHLCV data (assumes dollar is the quote asset)
     ohlcv_parser = subparsers.add_parser("convert-to-ohlcv")
     ohlcv_parser.add_argument("input_file", nargs="?", default="trades.csv")
     ohlcv_parser.add_argument("output_file", nargs="?", default="ohlcv.csv")
