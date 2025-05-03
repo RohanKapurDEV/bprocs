@@ -1,4 +1,5 @@
 import aiohttp
+from time import timezone
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 
@@ -17,25 +18,36 @@ class BinanceClient:
                 return await response.json()
 
     async def fetch_agg_trades(
-        self,
-        days_back: int = 1,
-        limit: int = 1000,
+        self, days_back: int = 1, limit: int = 1000, start_now: bool = True
     ) -> List[Dict[str, Any]]:
         """
         Fetch all aggTrades for the symbol in the past `days_back` days.
         Handles pagination over time windows.
         """
-        now = datetime.utcnow()
-        end_time = int(now.timestamp() * 1000)
-        start_time = int((now - timedelta(days=days_back)).timestamp() * 1000)
+        now = datetime.now(timezone.utc)
+
+        if start_now:
+            end_time = now
+            start_time = now - timedelta(days=days_back)
+        else:
+            start_of_current_day = now.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time = start_of_current_day
+            end_time = start_of_current_day + timedelta(days=days_back)
+
+        # Convert to milliseconds
+        start_time_ms = int(start_time.timestamp() * 1000)
+        end_time_ms = int(end_time.timestamp() * 1000)
+
         all_trades = []
 
         while True:
             params = {
                 "symbol": self.symbol,
                 "limit": limit,
-                "startTime": start_time,
-                "endTime": end_time,
+                "startTime": start_time_ms,
+                "endTime": end_time_ms,
             }
             data = await self.api_get("aggTrades", params)
 
