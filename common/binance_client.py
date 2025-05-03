@@ -23,8 +23,7 @@ class BinanceClient:
         self, days_back: int = 1, limit: int = 1000, start_now: bool = True
     ) -> AsyncGenerator[List[Dict[str, Any]], None]:
         """
-        Async generator that yields batches of aggTrades
-        Allows real-time progress tracking
+        Async generator that yields batches of aggTrade data from Binance API
         """
         # Calculate initial time window
         now = datetime.now(timezone.utc)
