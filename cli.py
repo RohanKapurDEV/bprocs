@@ -14,15 +14,16 @@ def main():
     fetch_parser.add_argument("output", nargs="?", default="trades.csv")
     fetch_parser.add_argument("start_now", nargs="?", type=bool, default=True)
 
-    # Subparser for turning a trades csv file into time-discretized OHLCV data
+    # Subparser for converting trades to time-discrete OHLCV data
     ohlcv_parser = subparsers.add_parser("timebars")
     ohlcv_parser.add_argument("input_file", nargs="?", default="trades.csv")
     ohlcv_parser.add_argument("output_file", nargs="?", default="ohlcv.csv")
-
-    # Subparser for turning a trades csv file into quote-asset-discretized OHLCV data (basically dollar bars in my case)
-    ohlcv_parser = subparsers.add_parser("quotebars")
-    ohlcv_parser.add_argument("input_file", nargs="?", default="trades.csv")
-    ohlcv_parser.add_argument("output_file", nargs="?", default="ohlcv.csv")
+    ohlcv_parser.add_argument(
+        "--interval",
+        type=str,
+        default="5min",
+        help="Time interval for OHLCV bars (e.g., '1min', '5min', '1H')",
+    )
 
     args = parser.parse_args()
 
@@ -30,7 +31,7 @@ def main():
         asyncio.run(
             run_fetch_trades(args.symbol, args.days, args.output, args.start_now)
         )
-    elif args.command == "convert-to-timebars":
+    elif args.command == "timebars":
         print(f"Converting {args.input_file} to {args.output_file}...")
     else:
         parser.print_help()

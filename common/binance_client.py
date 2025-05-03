@@ -1,6 +1,5 @@
 import aiohttp
-from time import timezone
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional
 
 
@@ -12,7 +11,9 @@ class BinanceClient:
 
     async def api_get(self, path: str, params: Optional[Dict[str, Any]] = None) -> Any:
         url = f"{self.BASE_URL}/{path}"
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=120)
+
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(url, params=params) as response:
                 response.raise_for_status()
                 return await response.json()
