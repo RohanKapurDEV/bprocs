@@ -5,26 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CSV → Lightweight-Charts Viewer</title>
 
-    <!-- TradingView Lightweight-Charts CDN -->
+    <!-- TradingView Lightweight-Charts -->
     <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 
     <style>
-      /* ----------  DARK-MODE LOOK & FEEL ---------- */
       :root {
         --bg: #0d1117;
         --panel: #161b22;
         --fg: #c9d1d9;
         --up: #26a69a;
         --down: #ef5350;
+        --grid: #21262d;
+        --border: #30363d;
       }
-
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
         font-family: system-ui, sans-serif;
       }
-
       body {
         background: var(--bg);
         color: var(--fg);
@@ -32,20 +31,17 @@
         flex-direction: column;
         height: 100vh;
       }
-
       header {
         padding: 1rem;
         background: var(--panel);
-        border-bottom: 1px solid #30363d;
+        border-bottom: 1px solid var(--border);
         display: flex;
-        align-items: center;
         gap: 1rem;
       }
-
       input[type="file"] {
         background: var(--bg);
         color: var(--fg);
-        border: 1px solid #30363d;
+        border: 1px solid var(--border);
         padding: 0.5rem 0.75rem;
         cursor: pointer;
       }
@@ -56,17 +52,36 @@
         padding: 0.5rem 0.75rem;
         cursor: pointer;
       }
-
       #chart {
         flex: 1;
         width: 100%;
+        position: relative;
+      }
+
+      /* Tooltip */
+      .tooltip {
+        position: absolute;
+        pointer-events: none;
+        z-index: 1000;
+        background: rgba(22, 27, 34, 0.96);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+        color: var(--fg);
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .tooltip.visible {
+        opacity: 1;
       }
     </style>
   </head>
   <body>
     <header>
-      <label>
-        Select OHLCV CSV
+      <label
+        >Select OHLCV CSV
         <input id="fileInput" type="file" accept=".csv" />
       </label>
     </header>
@@ -74,121 +89,131 @@
     <div id="chart"></div>
 
     <script>
-      /* ---------------- CHART INIT ---------------- */
-      const chartElem = document.getElementById("chart");
-      const chart = LightweightCharts.createChart(chartElem, {
-        layout: {
-          background: {
-            color: getComputedStyle(document.documentElement).getPropertyValue(
-              "--bg"
-            ),
-          },
-          textColor: getComputedStyle(
-            document.documentElement
-          ).getPropertyValue("--fg"),
-        },
-        width: chartElem.clientWidth,
-        height: chartElem.clientHeight,
-        rightPriceScale: { borderColor: "#30363d" },
-        timeScale: { borderColor: "#30363d" },
+      const $ = (s) => document.querySelector(s);
+      const css = (v) =>
+        getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+      /* ---------- Chart ---------- */
+      const chartDiv = $("#chart");
+      const chart = LightweightCharts.createChart(chartDiv, {
+        width: chartDiv.clientWidth,
+        height: chartDiv.clientHeight,
+        layout: { background: { color: css("--bg") }, textColor: css("--fg") },
         grid: {
-          horzLines: { color: "#21262d" },
-          vertLines: { color: "#21262d" },
+          vertLines: { color: css("--grid") },
+          horzLines: { color: css("--grid") },
+        },
+        rightPriceScale: { borderColor: css("--border") },
+        timeScale: {
+          borderColor: css("--border"),
+          timeVisible: true, // show time for intraday bars
+          secondsVisible: true, // include seconds
         },
       });
-
-      const candleSeries = chart.addCandlestickSeries({
-        upColor: getComputedStyle(document.documentElement).getPropertyValue(
-          "--up"
-        ),
-        borderUpColor: getComputedStyle(
-          document.documentElement
-        ).getPropertyValue("--up"),
-        wickUpColor: getComputedStyle(
-          document.documentElement
-        ).getPropertyValue("--up"),
-        downColor: getComputedStyle(document.documentElement).getPropertyValue(
-          "--down"
-        ),
-        borderDownColor: getComputedStyle(
-          document.documentElement
-        ).getPropertyValue("--down"),
-        wickDownColor: getComputedStyle(
-          document.documentElement
-        ).getPropertyValue("--down"),
-      });
-
-      const volumeSeries = chart.addHistogramSeries({
-        priceFormat: { type: "volume" },
-        priceScaleId: "volume",
-        scaleMargins: { top: 0.8, bottom: 0 },
-        color: getComputedStyle(document.documentElement).getPropertyValue(
-          "--up"
-        ),
-      });
-
-      chart.priceScale("volume").applyOptions({
-        scaleMargins: { top: 0.8, bottom: 0 },
-      });
-
-      /* ------------- HANDLE RESIZE --------------- */
-      window.addEventListener("resize", () => {
+      window.addEventListener("resize", () =>
         chart.applyOptions({
-          width: chartElem.clientWidth,
-          height: chartElem.clientHeight,
-        });
+          width: chartDiv.clientWidth,
+          height: chartDiv.clientHeight,
+        })
+      );
+
+      const candles = chart.addCandlestickSeries({
+        upColor: css("--up"),
+        borderUpColor: css("--up"),
+        wickUpColor: css("--up"),
+        downColor: css("--down"),
+        borderDownColor: css("--down"),
+        wickDownColor: css("--down"),
       });
+      const volumes = chart.addHistogramSeries({
+        priceFormat: { type: "volume" },
+        priceScaleId: "vol",
+        scaleMargins: { top: 0.8, bottom: 0 },
+      });
+      chart
+        .priceScale("vol")
+        .applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
-      /* ------------- CSV → CHART DATA ------------ */
-      document.getElementById("fileInput").addEventListener("change", (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+      /* ---------- Tooltip ---------- */
+      const tooltip = document.createElement("div");
+      tooltip.className = "tooltip";
+      chartDiv.appendChild(tooltip);
 
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          const text = evt.target.result.trim();
-          const lines = text.split(/\r?\n/);
+      /* ---------- Data lookup ---------- */
+      let barMap = new Map(),
+        volMap = new Map();
 
-          // Expect header: timestamp,open,high,low,close,volume
-          const candleData = [];
-          const volumeData = [];
+      /* ---------- CSV loader ---------- */
+      $("#fileInput").addEventListener("change", (ev) => {
+        const f = ev.target.files[0];
+        if (!f) return;
+        const r = new FileReader();
+        r.onload = (e) => {
+          const rows = e.target.result.trim().split(/\r?\n/).slice(1);
+          const cData = [],
+            vData = [];
+          barMap.clear();
+          volMap.clear();
+          for (const line of rows) {
+            const [ts, o, h, l, c, v] = line.split(",").map((s) => s.trim());
+            const time = Math.floor(new Date(ts).getTime() / 1000); // epoch seconds
+            const open = +o,
+              high = +h,
+              low = +l,
+              close = +c,
+              vol = +v;
 
-          for (let i = 1; i < lines.length; i++) {
-            const [ts, open, high, low, close, vol] = lines[i]
-              .split(",")
-              .map((s) => s.trim());
-            const t = Math.floor(new Date(ts).getTime() / 1000); // seconds epoch
-
-            const o = parseFloat(open);
-            const h = parseFloat(high);
-            const l = parseFloat(low);
-            const c = parseFloat(close);
-            const v = parseFloat(vol);
-
-            candleData.push({ time: t, open: o, high: h, low: l, close: c });
-            volumeData.push({
-              time: t,
-              value: v,
-              color:
-                c >= o
-                  ? getComputedStyle(document.documentElement).getPropertyValue(
-                      "--up"
-                    )
-                  : getComputedStyle(document.documentElement).getPropertyValue(
-                      "--down"
-                    ),
+            const bar = { time, open, high, low, close };
+            cData.push(bar);
+            vData.push({
+              time,
+              value: vol,
+              color: close >= open ? css("--up") : css("--down"),
             });
+            barMap.set(time, bar);
+            volMap.set(time, vol);
           }
-
-          // Sort chronologically just in case
-          candleData.sort((a, b) => a.time - b.time);
-          volumeData.sort((a, b) => a.time - b.time);
-
-          candleSeries.setData(candleData);
-          volumeSeries.setData(volumeData);
+          cData.sort((a, b) => a.time - b.time);
+          vData.sort((a, b) => a.time - b.time);
+          candles.setData(cData);
+          volumes.setData(vData);
           chart.timeScale().fitContent();
         };
-        reader.readAsText(file);
+        r.readAsText(f);
+      });
+
+      /* ---------- Crosshair / Tooltip ---------- */
+      chart.subscribeCrosshairMove((p) => {
+        if (!p.time || !p.point) {
+          tooltip.classList.remove("visible");
+          return;
+        }
+
+        const bar = barMap.get(p.time);
+        if (!bar) {
+          tooltip.classList.remove("visible");
+          return;
+        }
+        const vol = volMap.get(p.time) ?? 0;
+        const ts = new Date(p.time * 1000)
+          .toISOString()
+          .replace("T", " ")
+          .substring(0, 19); // YYYY-MM-DD HH:MM:SS
+
+        tooltip.innerHTML = `<strong>${ts}</strong><br>
+		O: ${bar.open}&nbsp; H: ${bar.high}&nbsp; L: ${bar.low}&nbsp; C: ${bar.close}<br>
+		V: ${vol}`;
+
+        const m = 12;
+        let left = p.point.x + m,
+          top = p.point.y + m;
+        if (left + tooltip.clientWidth > chartDiv.clientWidth)
+          left = p.point.x - m - tooltip.clientWidth;
+        if (top + tooltip.clientHeight > chartDiv.clientHeight)
+          top = p.point.y - m - tooltip.clientHeight;
+        tooltip.style.left = left + "px";
+        tooltip.style.top = top + "px";
+        tooltip.classList.add("visible");
       });
     </script>
   </body>
