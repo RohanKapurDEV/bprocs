@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-from main import run_fetch_trades, run_generate_timebars
+from main import run_fetch_trades, run_generate_timebars, run_generate_quotebars
 
 
 def main():
@@ -25,6 +25,17 @@ def main():
         help="Time interval for OHLCV bars (e.g., '1min', '5min', '1H')",
     )
 
+    # Subparser for converting trades to dollar bars
+    quotebar_parser = subparsers.add_parser("quotebars")
+    quotebar_parser.add_argument("input_file", nargs="?", default="trades.csv")
+    quotebar_parser.add_argument("output_file", nargs="?", default="dollar_bars.csv")
+    quotebar_parser.add_argument(
+        "--dollar-size",
+        type=float,
+        required=True,
+        help="Dollar size per bar (e.g., 100000 for $100k bars)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "fetch-trades":
@@ -36,6 +47,10 @@ def main():
             run_generate_timebars(
                 args.input_file, args.output_file, interval=args.interval
             )
+        )
+    elif args.command == "quotebars":
+        asyncio.run(
+            run_generate_quotebars(args.input_file, args.output_file, args.dollar_size)
         )
     else:
         parser.print_help()

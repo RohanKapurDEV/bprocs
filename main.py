@@ -5,6 +5,8 @@ from common.csv_writer import write_trades_to_csv
 from rich.progress import Progress
 from rich import print
 from datetime import datetime
+import csv
+from typing import List, Dict, Any
 
 
 async def run_fetch_trades(symbol: str, days: int, output: str, start_now: bool):
@@ -75,9 +77,100 @@ async def run_generate_timebars(
     print(f"Wrote {len(ohlcv)} bars to {output_file}")
 
 
-async def generate_fixed_size_quote_bars():
-    print("Generating fixed-size quote bars...")
+async def run_generate_quotebars(input_file: str, output_file: str, dollar_size: float):
+    """Generate dollar-denominated OHLCV bars"""
+    print(f"Generating ${dollar_size:,.0f} dollar bars from {input_file}...")
+
+    trades = _read_trades_from_csv(input_file)
+    bars = []
+
+    current_bar: Dict[str, Any] = None
+    accumulated = 0.0
+
+    for trade in trades:
+        # Calculate dollar value of this trade
+        value = trade.price * trade.quantity
+
+        if not current_bar:
+            # Initialize new bar
+            current_bar = {
+                "start_time": trade.timestamp,
+                "open": trade.price,
+                "high": trade.price,
+                "low": trade.price,
+                "close": trade.price,
+                "volume": value,
+                "trade_count": 1,
+            }
+        else:
+            # Update existing bar
+            current_bar["high"] = max(current_bar["high"], trade.price)
+            current_bar["low"] = min(current_bar["low"], trade.price)
+            current_bar["close"] = trade.price
+            current_bar["volume"] += value
+            current_bar["trade_count"] += 1
+
+        accumulated += value
+
+        # Check if bar is complete
+        if accumulated >= dollar_size:
+            current_bar["end_time"] = trade.timestamp
+            bars.append(current_bar)
+
+            # Reset for next bar
+            current_bar = None
+            accumulated = 0.0
+
+    # Add final partial bar if exists
+    if current_bar:
+        current_bar["end_time"] = trade.timestamp  # Last trade's timestamp
+        bars.append(current_bar)
+
+    # Write to CSV
+    _write_dollar_bars(bars, output_file)
+    print(f"Generated {len(bars)} dollar bars in {output_file}")
 
 
-async def generate_dynamically_size_quote_bars():
-    print("Generating dynamically sized quote bars...")
+def _write_dollar_bars(bars: List[Dict], filename: str):
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "start_time",
+                "end_time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "dollar_volume",
+                "trade_count",
+            ]
+        )
+        for bar in bars:
+            writer.writerow(
+                [
+                    bar["start_time"],
+                    bar["end_time"],
+                    bar["open"],
+                    bar["high"],
+                    bar["low"],
+                    bar["close"],
+                    bar["volume"],
+                    bar["trade_count"],
+                ]
+            )
+
+
+def _read_trades_from_csv(filename: str) -> List[Trade]:
+    trades = []
+    with open(filename, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            trades.append(
+                Trade(
+                    price=row["price"],
+                    quantity=row["quantity"],
+                    timestamp=row["timestamp"],
+                )
+            )
+    return trades

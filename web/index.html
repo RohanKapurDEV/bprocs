@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CSV → Lightweight-Charts Viewer</title>
+    <title>Universal OHLCV / Dollar-Bar Viewer (ECharts)</title>
 
-    <!-- TradingView Lightweight-Charts -->
-    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 
     <style>
       :root {
@@ -55,33 +55,13 @@
       #chart {
         flex: 1;
         width: 100%;
-        position: relative;
-      }
-
-      /* Tooltip */
-      .tooltip {
-        position: absolute;
-        pointer-events: none;
-        z-index: 1000;
-        background: rgba(22, 27, 34, 0.96);
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        padding: 0.5rem 0.75rem;
-        font-size: 0.75rem;
-        color: var(--fg);
-        white-space: nowrap;
-        opacity: 0;
-        transition: opacity 0.15s;
-      }
-      .tooltip.visible {
-        opacity: 1;
       }
     </style>
   </head>
   <body>
     <header>
       <label
-        >Select OHLCV CSV
+        >Select CSV
         <input id="fileInput" type="file" accept=".csv" />
       </label>
     </header>
@@ -89,132 +69,168 @@
     <div id="chart"></div>
 
     <script>
+      /* ---------- helpers ---------- */
       const $ = (s) => document.querySelector(s);
       const css = (v) =>
         getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+      const upColor = css("--up");
+      const downColor = css("--down");
 
-      /* ---------- Chart ---------- */
-      const chartDiv = $("#chart");
-      const chart = LightweightCharts.createChart(chartDiv, {
-        width: chartDiv.clientWidth,
-        height: chartDiv.clientHeight,
-        layout: { background: { color: css("--bg") }, textColor: css("--fg") },
-        grid: {
-          vertLines: { color: css("--grid") },
-          horzLines: { color: css("--grid") },
-        },
-        rightPriceScale: { borderColor: css("--border") },
-        timeScale: {
-          borderColor: css("--border"),
-          timeVisible: true, // show time for intraday bars
-          secondsVisible: true, // include seconds
-        },
-      });
-      window.addEventListener("resize", () =>
-        chart.applyOptions({
-          width: chartDiv.clientWidth,
-          height: chartDiv.clientHeight,
-        })
-      );
-
-      const candles = chart.addCandlestickSeries({
-        upColor: css("--up"),
-        borderUpColor: css("--up"),
-        wickUpColor: css("--up"),
-        downColor: css("--down"),
-        borderDownColor: css("--down"),
-        wickDownColor: css("--down"),
-      });
-      const volumes = chart.addHistogramSeries({
-        priceFormat: { type: "volume" },
-        priceScaleId: "vol",
-        scaleMargins: { top: 0.8, bottom: 0 },
-      });
-      chart
-        .priceScale("vol")
-        .applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-
-      /* ---------- Tooltip ---------- */
-      const tooltip = document.createElement("div");
-      tooltip.className = "tooltip";
-      chartDiv.appendChild(tooltip);
-
-      /* ---------- Data lookup ---------- */
-      let barMap = new Map(),
-        volMap = new Map();
+      const chart = echarts.init($("#chart"), null, { renderer: "canvas" });
+      window.addEventListener("resize", () => chart.resize());
 
       /* ---------- CSV loader ---------- */
-      $("#fileInput").addEventListener("change", (ev) => {
-        const f = ev.target.files[0];
+      $("#fileInput").addEventListener("change", (e) => {
+        const f = e.target.files[0];
         if (!f) return;
         const r = new FileReader();
-        r.onload = (e) => {
-          const rows = e.target.result.trim().split(/\r?\n/).slice(1);
-          const cData = [],
-            vData = [];
-          barMap.clear();
-          volMap.clear();
-          for (const line of rows) {
-            const [ts, o, h, l, c, v] = line.split(",").map((s) => s.trim());
-            const time = Math.floor(new Date(ts).getTime() / 1000); // epoch seconds
-            const open = +o,
-              high = +h,
-              low = +l,
-              close = +c,
-              vol = +v;
-
-            const bar = { time, open, high, low, close };
-            cData.push(bar);
-            vData.push({
-              time,
-              value: vol,
-              color: close >= open ? css("--up") : css("--down"),
-            });
-            barMap.set(time, bar);
-            volMap.set(time, vol);
-          }
-          cData.sort((a, b) => a.time - b.time);
-          vData.sort((a, b) => a.time - b.time);
-          candles.setData(cData);
-          volumes.setData(vData);
-          chart.timeScale().fitContent();
-        };
+        r.onload = (ev) => parseAndDraw(ev.target.result.trim());
         r.readAsText(f);
       });
 
-      /* ---------- Crosshair / Tooltip ---------- */
-      chart.subscribeCrosshairMove((p) => {
-        if (!p.time || !p.point) {
-          tooltip.classList.remove("visible");
-          return;
+      function parseAndDraw(text) {
+        const rows = text.split(/\r?\n/);
+        if (rows.length < 2) return;
+
+        const header = rows[0].split(",").map((h) => h.trim().toLowerCase());
+
+        /* ---- detect schema ---- */
+        const isDollar =
+          header.includes("start_time") && header.includes("dollar_volume");
+
+        /* field indices */
+        const idx = (name) => header.indexOf(name);
+
+        /* containers */
+        const candleData = []; // [time, open, close, low, high]
+        const volData = []; // [time, volume]  (volume OR dollar_volume)
+        const colors = []; // up/down color per bar
+
+        for (let i = 1; i < rows.length; i++) {
+          if (!rows[i]) continue;
+          const cols = rows[i].split(",").map((s) => s.trim());
+
+          let t; // epoch ms of bar “start”
+          let volume;
+
+          if (isDollar) {
+            t = Number(cols[idx("start_time")]);
+            volume = Number(cols[idx("dollar_volume")]);
+          } else {
+            t = Date.parse(cols[idx("timestamp")]);
+            volume = Number(cols[idx("volume")]);
+          }
+
+          const open = Number(cols[idx("open")]);
+          const high = Number(cols[idx("high")]);
+          const low = Number(cols[idx("low")]);
+          const close = Number(cols[idx("close")]);
+          const isUp = close >= open;
+
+          candleData.push([t, open, close, low, high]);
+          volData.push([t, volume]);
+          colors.push(isUp ? upColor : downColor);
         }
 
-        const bar = barMap.get(p.time);
-        if (!bar) {
-          tooltip.classList.remove("visible");
-          return;
-        }
-        const vol = volMap.get(p.time) ?? 0;
-        const ts = new Date(p.time * 1000)
-          .toISOString()
-          .replace("T", " ")
-          .substring(0, 19); // YYYY-MM-DD HH:MM:SS
+        drawChart(candleData, volData, colors, isDollar);
+      }
 
-        tooltip.innerHTML = `<strong>${ts}</strong><br>
-		O: ${bar.open}&nbsp; H: ${bar.high}&nbsp; L: ${bar.low}&nbsp; C: ${bar.close}<br>
-		V: ${vol}`;
+      function drawChart(candles, volumes, colors, dollarBarMode) {
+        const option = {
+          backgroundColor: css("--bg"),
+          animation: false,
+          color: [upColor, downColor],
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "cross" },
+            backgroundColor: css("--panel"),
+            borderColor: css("--border"),
+            textStyle: { color: css("--fg") },
+            valueFormatter: (v) => v,
+          },
+          grid: [
+            { left: "10%", right: "8%", top: 30, height: "60%" },
+            { left: "10%", right: "8%", top: "75%", height: "17%" },
+          ],
+          xAxis: [
+            {
+              type: "time",
+              scale: true,
+              gridIndex: 0,
+              axisLine: { lineStyle: { color: css("--fg") } },
+              axisLabel: { color: css("--fg") },
+              splitLine: { lineStyle: { color: css("--grid") } },
+            },
+            {
+              type: "time",
+              scale: true,
+              gridIndex: 1,
+              axisLine: { lineStyle: { color: css("--fg") } },
+              axisLabel: { color: css("--fg") },
+              splitLine: { show: false },
+            },
+          ],
+          yAxis: [
+            {
+              scale: true,
+              gridIndex: 0,
+              axisLine: { lineStyle: { color: css("--fg") } },
+              axisLabel: { color: css("--fg") },
+              splitLine: { lineStyle: { color: css("--grid") } },
+            },
+            {
+              gridIndex: 1,
+              axisLine: { lineStyle: { color: css("--fg") } },
+              axisLabel: { color: css("--fg") },
+              splitLine: { show: false },
+            },
+          ],
+          dataZoom: [
+            { type: "inside", xAxisIndex: [0, 1], start: 0, end: 100 },
+            {
+              show: true,
+              type: "slider",
+              xAxisIndex: [0, 1],
+              top: "93%",
+              backgroundColor: css("--panel"),
+              dataBackground: {
+                lineStyle: { color: css("--border") },
+                areaStyle: { color: css("--border") },
+              },
+              handleStyle: { color: "#6f7680" },
+              textStyle: { color: css("--fg") },
+            },
+          ],
+          series: [
+            {
+              name: dollarBarMode ? "Dollar Bars" : "Price",
+              type: "candlestick",
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              data: candles,
+              itemStyle: {
+                color: upColor,
+                borderColor: upColor,
+                color0: downColor,
+                borderColor0: downColor,
+              },
+            },
+            {
+              name: dollarBarMode ? "Dollar Volume" : "Volume",
+              type: "bar",
+              xAxisIndex: 1,
+              yAxisIndex: 1,
+              data: volumes.map((d, i) => ({
+                value: d,
+                itemStyle: { color: colors[i] },
+              })),
+              silent: true,
+            },
+          ],
+        };
 
-        const m = 12;
-        let left = p.point.x + m,
-          top = p.point.y + m;
-        if (left + tooltip.clientWidth > chartDiv.clientWidth)
-          left = p.point.x - m - tooltip.clientWidth;
-        if (top + tooltip.clientHeight > chartDiv.clientHeight)
-          top = p.point.y - m - tooltip.clientHeight;
-        tooltip.style.left = left + "px";
-        tooltip.style.top = top + "px";
-        tooltip.classList.add("visible");
-      });
+        chart.setOption(option, true);
+      }
     </script>
   </body>
 </html>
