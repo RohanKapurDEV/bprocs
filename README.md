@@ -4,6 +4,8 @@
 
 This repo houses a CLI tool for pulling aggregated trade data from binance spot markets and resampling them into both time-discretized and quote-discretized OHLCV charts. It also has a minimal web UI that is able to load in dataset files made by the cli, for visualization purposes. It supports visualing both timebars and quotebars.
 
+I mostly use python for scripting/data wrangling, so dont expect any kind clean code principles being followed here
+
 ### Install
 
 Assuming you have a local python installation:
