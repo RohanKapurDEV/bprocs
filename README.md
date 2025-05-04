@@ -2,6 +2,8 @@
 
 ![alt text](./media/ess.png)
 
+Note: I use the terms dollar bar and quotebar interchangeably
+
 This repo houses a CLI tool for pulling aggregated trade data from binance spot markets and resampling them into both time-discretized and quote-discretized OHLCV charts. It also has a minimal web UI that is able to load in dataset files made by the cli, for visualization purposes. It supports visualizing both timebars and quotebars.
 
 I mostly use python for scripting/data wrangling, so dont expect any clean code principles being followed here
@@ -49,3 +51,9 @@ Resample the trades in a csv into quote-discretized OHLCV data:
 -- this is basically just dollar bars for stablecoin markets. pretty nice for ml stuff, de prado has a nice book outlining why
 
 ---
+
+--WIP--
+
+Run a dollar bar analysis report (Temporal, Volume, Price, Structure):
+
+`python cli.py analyze-bars <INPUT_QUOTEBAR_FILE> --target-size 100000

@@ -1,6 +1,11 @@
 import argparse
 import asyncio
-from main import run_fetch_trades, run_generate_timebars, run_generate_quotebars
+from main import (
+    run_fetch_trades,
+    run_generate_timebars,
+    run_generate_quotebars,
+    run_analyze_bars,
+)
 
 
 def main():
@@ -36,6 +41,12 @@ def main():
         help="Dollar size per bar (e.g., 100000 for $100k bars)",
     )
 
+    # Subparser for analyzing dollar bars
+    analyze_parser = subparsers.add_parser("analyze-bars")
+    analyze_parser.add_argument("input_file", help="Dollar bars CSV")
+    analyze_parser.add_argument("--output", default="bar_analysis.txt")
+    analyze_parser.add_argument("--target-size", type=float, required=True)
+
     args = parser.parse_args()
 
     if args.command == "fetch-trades":
@@ -52,6 +63,15 @@ def main():
         asyncio.run(
             run_generate_quotebars(args.input_file, args.output_file, args.dollar_size)
         )
+    elif args.command == "analyze-bars":
+        asyncio.run(
+            run_analyze_bars(
+                args.input_file,
+                args.output,
+                target_size=args.target_size,
+            )
+        )
+
     else:
         parser.print_help()
 

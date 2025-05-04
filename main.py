@@ -1,11 +1,13 @@
+import csv
 import pandas as pd
+from scipy import stats
+import numpy as np
 from common.trade import Trade
 from common.binance_client import BinanceClient
 from common.csv_writer import write_trades_to_csv
 from rich.progress import Progress
 from rich import print
 from datetime import datetime
-import csv
 from typing import List, Dict, Any
 
 
@@ -174,3 +176,69 @@ def _read_trades_from_csv(filename: str) -> List[Trade]:
                 )
             )
     return trades
+
+
+async def run_analyze_bars(input_file: str, output: str, target_size: float):
+    """Comprehensive dollar bar analysis"""
+    df = pd.read_csv(input_file)
+
+    # Convert timestamps
+    df["duration"] = df["end_time"] - df["start_time"]
+    df["returns"] = df["close"].pct_change()
+
+    analysis = {
+        "temporal": {
+            "avg_duration": np.mean(df["duration"]),
+            "duration_distribution": np.percentile(df["duration"], [25, 50, 75]),
+            "hourly_seasonality": df.groupby(
+                pd.to_datetime(df["end_time"], unit="ms").dt.hour
+            ).size(),
+        },
+        "volume": {
+            "avg_trades": df["trade_count"].mean(),
+            "partial_bars_pct": len(df[df["dollar_volume"] < target_size * 0.99])
+            / len(df),
+            "volume_skew": stats.skew(df["dollar_volume"]),
+        },
+        "price": {
+            "avg_volatility": (df["high"] - df["low"]).mean(),
+            "return_autocorrelation": df["returns"].autocorr(),
+            "max_drawdown": (df["high"] - df["low"]).max(),
+        },
+        "structure": {
+            "size_deviation": (df["dollar_volume"] - target_size).abs().mean(),
+            "gap_frequency": (df["open"] > df.shift(1)["close"]).mean(),
+        },
+    }
+
+    # Save analysis report
+    with open(output, "w") as f:
+        f.write(generate_report(analysis, target_size))
+
+    print(f"Analysis saved to {output}")
+
+
+def generate_report(analysis: dict, target_size: float) -> str:
+    """Format analysis into readable report"""
+    return f"""
+DOLLAR BAR ANALYSIS REPORT (Target Size: ${target_size:,.0f})
+    
+=== Temporal Characteristics ===
+Average Bar Duration: {analysis["temporal"]["avg_duration"] / 1000:.2f}s
+Duration Percentiles (25/50/75): {analysis["temporal"]["duration_distribution"] / 1000} seconds
+Peak Activity Hours: {analysis["temporal"]["hourly_seasonality"].idxmax()} UTC
+
+=== Volume Dynamics ===
+Average Trades/Bar: {analysis["volume"]["avg_trades"]:.1f}
+Partial Bars (%): {analysis["volume"]["partial_bars_pct"] * 100:.1f}%
+Volume Skewness: {analysis["volume"]["volume_skew"]:.2f}
+
+=== Price Behavior ===
+Average Bar Range: {analysis["price"]["avg_volatility"]:.2f}
+Return Autocorrelation (lag 1): {analysis["price"]["return_autocorrelation"]:.2f}
+Maximum Intra-Bar Drawdown: {analysis["price"]["max_drawdown"]:.2f}
+
+=== Structural Observations ===
+Average Size Deviation: ${analysis["structure"]["size_deviation"]:,.0f}
+Gap Frequency: {analysis["structure"]["gap_frequency"] * 100:.1f}%
+"""
