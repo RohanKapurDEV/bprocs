@@ -39,8 +39,11 @@ Resample the trades in a csv into time-discretized OHLCV data:
 
 Resample the trades in a csv into quote-discretized OHLCV data:
 
--- this is basically just dollar bars for stablecoin markets. pretty nice for ml stuff, de prado has a nice book outlining why
+`python cli.py quotebars <INPUT_FILE> <OUTPUT_FILE> <BAR_CONFIG_PATH>`
 
-`python cli.py quotebars <INPUT_FILE> <OUTPUT_FILE> <BAR_CONFIG_PATH> `
+- `python cli.py quotebars my_trades.csv dollar_bars_100k.csv --dollar-size 100000`
+- `python cli.py quotebars my_trades.csv my_dollar_bar_output.csv --dollar-size 50000`
+
+-- this is basically just dollar bars for stablecoin markets. pretty nice for ml stuff, de prado has a nice book outlining why
 
 ---
