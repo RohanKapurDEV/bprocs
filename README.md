@@ -1,4 +1,4 @@
-# bar processor cli (bp-cli)
+# bprocs (bar processing scripts)
 
 ![alt text](./media/ess.png)
 
