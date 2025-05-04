@@ -10,7 +10,7 @@ Assuming you have a local python installation:
 
 ```bash
 git clone <REPO_URL>
-cd rtt/
+cd bprocs/
 source venv/bin/activate
 pip install -r requirements.txt
 ```
