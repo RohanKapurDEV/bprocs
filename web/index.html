@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CSV → Lightweight-Charts Viewer</title>
+
+    <!-- TradingView Lightweight-Charts CDN -->
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+
+    <style>
+      /* ----------  DARK-MODE LOOK & FEEL ---------- */
+      :root {
+        --bg: #0d1117;
+        --panel: #161b22;
+        --fg: #c9d1d9;
+        --up: #26a69a;
+        --down: #ef5350;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: system-ui, sans-serif;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+      }
+
+      header {
+        padding: 1rem;
+        background: var(--panel);
+        border-bottom: 1px solid #30363d;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      input[type="file"] {
+        background: var(--bg);
+        color: var(--fg);
+        border: 1px solid #30363d;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+      }
+      input[type="file"]::-webkit-file-upload-button {
+        background: var(--panel);
+        border: none;
+        color: var(--fg);
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+      }
+
+      #chart {
+        flex: 1;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <label>
+        Select OHLCV CSV
+        <input id="fileInput" type="file" accept=".csv" />
+      </label>
+    </header>
+
+    <div id="chart"></div>
+
+    <script>
+      /* ---------------- CHART INIT ---------------- */
+      const chartElem = document.getElementById("chart");
+      const chart = LightweightCharts.createChart(chartElem, {
+        layout: {
+          background: {
+            color: getComputedStyle(document.documentElement).getPropertyValue(
+              "--bg"
+            ),
+          },
+          textColor: getComputedStyle(
+            document.documentElement
+          ).getPropertyValue("--fg"),
+        },
+        width: chartElem.clientWidth,
+        height: chartElem.clientHeight,
+        rightPriceScale: { borderColor: "#30363d" },
+        timeScale: { borderColor: "#30363d" },
+        grid: {
+          horzLines: { color: "#21262d" },
+          vertLines: { color: "#21262d" },
+        },
+      });
+
+      const candleSeries = chart.addCandlestickSeries({
+        upColor: getComputedStyle(document.documentElement).getPropertyValue(
+          "--up"
+        ),
+        borderUpColor: getComputedStyle(
+          document.documentElement
+        ).getPropertyValue("--up"),
+        wickUpColor: getComputedStyle(
+          document.documentElement
+        ).getPropertyValue("--up"),
+        downColor: getComputedStyle(document.documentElement).getPropertyValue(
+          "--down"
+        ),
+        borderDownColor: getComputedStyle(
+          document.documentElement
+        ).getPropertyValue("--down"),
+        wickDownColor: getComputedStyle(
+          document.documentElement
+        ).getPropertyValue("--down"),
+      });
+
+      const volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: "volume" },
+        priceScaleId: "volume",
+        scaleMargins: { top: 0.8, bottom: 0 },
+        color: getComputedStyle(document.documentElement).getPropertyValue(
+          "--up"
+        ),
+      });
+
+      chart.priceScale("volume").applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+      });
+
+      /* ------------- HANDLE RESIZE --------------- */
+      window.addEventListener("resize", () => {
+        chart.applyOptions({
+          width: chartElem.clientWidth,
+          height: chartElem.clientHeight,
+        });
+      });
+
+      /* ------------- CSV → CHART DATA ------------ */
+      document.getElementById("fileInput").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          const text = evt.target.result.trim();
+          const lines = text.split(/\r?\n/);
+
+          // Expect header: timestamp,open,high,low,close,volume
+          const candleData = [];
+          const volumeData = [];
+
+          for (let i = 1; i < lines.length; i++) {
+            const [ts, open, high, low, close, vol] = lines[i]
+              .split(",")
+              .map((s) => s.trim());
+            const t = Math.floor(new Date(ts).getTime() / 1000); // seconds epoch
+
+            const o = parseFloat(open);
+            const h = parseFloat(high);
+            const l = parseFloat(low);
+            const c = parseFloat(close);
+            const v = parseFloat(vol);
+
+            candleData.push({ time: t, open: o, high: h, low: l, close: c });
+            volumeData.push({
+              time: t,
+              value: v,
+              color:
+                c >= o
+                  ? getComputedStyle(document.documentElement).getPropertyValue(
+                      "--up"
+                    )
+                  : getComputedStyle(document.documentElement).getPropertyValue(
+                      "--down"
+                    ),
+            });
+          }
+
+          // Sort chronologically just in case
+          candleData.sort((a, b) => a.time - b.time);
+          volumeData.sort((a, b) => a.time - b.time);
+
+          candleSeries.setData(candleData);
+          volumeSeries.setData(volumeData);
+          chart.timeScale().fitContent();
+        };
+        reader.readAsText(file);
+      });
+    </script>
+  </body>
+</html>

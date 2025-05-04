@@ -8,6 +8,16 @@ from datetime import datetime
 
 
 async def run_fetch_trades(symbol: str, days: int, output: str, start_now: bool):
+    """
+    Fetch trades from Binance and write to CSV.
+
+    Args:
+        symbol (str): Trading pair symbol (e.g., 'BTCUSDT').
+        days (int): Number of days to fetch trades for.
+        output (str): Output CSV file path.
+        start_now (bool): Whether to start fetching from now or from the past.
+    """
+
     print(f"Fetching trades for {symbol} for the last {days} days...")
 
     client = BinanceClient(symbol)
@@ -32,9 +42,17 @@ async def run_fetch_trades(symbol: str, days: int, output: str, start_now: bool)
 async def run_generate_timebars(
     input_file: str,
     output_file: str,
-    interval: str = "5min",
+    interval: str = "1min",
 ):
-    """Generate OHLCV CSV from trades CSV."""
+    """
+    Generate time-discrete OHLCV data from trades CSV file.
+
+    Args:
+        input_file (str): Path to the input trades CSV file.
+        output_file (str): Path to the output OHLCV CSV file.
+        interval (str): Time interval for OHLCV bars (e.g., '1min', '5min', '1H').
+    """
+
     print(f"Generating {interval} OHLCV bars from {input_file}...")
 
     # Read trades CSV
@@ -55,3 +73,11 @@ async def run_generate_timebars(
     # Save to CSV
     ohlcv.to_csv(output_file, index=False)
     print(f"Wrote {len(ohlcv)} bars to {output_file}")
+
+
+async def generate_fixed_size_quote_bars():
+    print("Generating fixed-size quote bars...")
+
+
+async def generate_dynamically_size_quote_bars():
+    print("Generating dynamically sized quote bars...")

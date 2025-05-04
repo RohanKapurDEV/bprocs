@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-from main import run_fetch_trades
+from main import run_fetch_trades, run_generate_timebars
 
 
 def main():
@@ -32,7 +32,11 @@ def main():
             run_fetch_trades(args.symbol, args.days, args.output, args.start_now)
         )
     elif args.command == "timebars":
-        print(f"Converting {args.input_file} to {args.output_file}...")
+        asyncio.run(
+            run_generate_timebars(
+                args.input_file, args.output_file, interval=args.interval
+            )
+        )
     else:
         parser.print_help()
 
